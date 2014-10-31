@@ -78,7 +78,8 @@ class Sheet:
                     row_id += 1
 
             except csv.Error as e:
-                sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))        
+                sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))
+
 
     def compute(self):
         for key in self.cells:
