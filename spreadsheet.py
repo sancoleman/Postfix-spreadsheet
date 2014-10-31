@@ -78,8 +78,12 @@ class Sheet:
                     row_id += 1
 
             except csv.Error as e:
+<<<<<<< HEAD
                 sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))
 
+=======
+                sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))        
+>>>>>>> 572a556918e47677751741df51844dafcffd2e27
 
     def compute(self):
         for key in self.cells:
