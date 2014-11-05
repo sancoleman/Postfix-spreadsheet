@@ -95,7 +95,7 @@ class Sheet(object):
 
 def is_numeric(token):
     """Returns true if token looks like a float or int"""
-    return re.search("^[-+]?[0-9]*\.?[0-9]+", token)
+    return re.search(r"^[-+]?[0-9]*\.?[0-9]+", str(token))
 
 def is_identifier(token):
     """Returns true if token appears to be a cell reference / identifer"""
@@ -108,6 +108,12 @@ def is_operator(token, operators=ARITHMETIC_OPERATORS):
 
 def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
     """Computes the self.postfix expression of a string of numbers.
+    >>> print postfix("+")
+    #ERR
+    >>> print postfix("5")
+    5
+    >>> print postfix("c1")
+    #ERR
     >>> print postfix("5 1 2 + 4 * + 3 -")
     14.0
     >>> print postfix("4 2 5 * + 1 3 2 * + /")
@@ -124,6 +130,8 @@ def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
     8.0
     >>> print postfix("18 4 -")
     14.0
+    >>> print postfix("15 5 +")
+    20.0
     """
     if not expression:
         return "#ERR"
@@ -131,6 +139,14 @@ def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
     logging.info("Evaluate postfix: " + str(expression))
     stack = Stack()
     tokens = deque(expression.split())
+
+    print tokens
+    if len(tokens) == 1 and is_numeric(tokens):
+        return tokens
+
+    if len(tokens) == 1 and (not is_numeric(tokens)):
+        return "#ERR"
+
     while tokens or stack.items:
         logging.info("Tokens:" + str(tokens))
         logging.info("Postfix stack: " + str(stack.items))
@@ -149,10 +165,10 @@ def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
 
             elif is_identifier(token):
 
-                cellref = re.match(r"^([a-z][A-Z]+)([\d]+)", token)
-                logging.info(cellref.group())
-                logging.info("Lookup value: " + str(sheet.get_cell(cellref.group())))
-
+                cellref = re.match(r"^([a-z]+)([\d]+)", token)
+#                logging.info(cellref.group())
+#                print logging.info("Lookup value: " + str(sheet.get_cell(cellref.group())))
+#                assert not cellref
                 assert re.search("^[a-z]+", str(cellref.group(1))), str(cellref.group(1)) \
                                 + "(Error) valid character"
                 assert re.search("^[\d]+", str(cellref.group(2))), str(cellref.group(2)) \
