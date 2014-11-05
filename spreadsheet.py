@@ -1,10 +1,11 @@
 #!/usr/bin/env python -tt
 
-import sys, csv, operator, argparse, re, string, math
+import sys, csv, operator, argparse, re, string, math, logging
+import unittest
 from collections import deque
 from string import lowercase # imports 'abcdefghijklmnopqrstuvwxyz'
 
-parser = argparse.ArgumentParser(description='Spreadsheet by Scott Coleman')
+parser = argparse.ArgumentParser(description='Spreadsheet with Postfix RPV Eval by Scott Coleman')
 
 # Allow any number of additional arguments.
 parser.add_argument(nargs='*', action='store', dest='inputs',
@@ -16,8 +17,8 @@ args = parser.parse_args()
 ARITHMETIC_OPERATORS = {
     '+': operator.add, '-': operator.sub, '*': operator.mul, 
     '/': operator.div, '//': operator.floordiv,     
-    '%': operator.mod, '**': operator.pow, '<<': operator.lshift, 
-    '>>': operator.rshift
+    '%': operator.mod, '**': operator.pow, 
+    '<<': operator.lshift, '>>': operator.rshift
     }
 
 """ Limitation: Note that '__pow__()' should be defined to accept an optional third
@@ -29,10 +30,11 @@ Base 26 conversion functions from
 http://stackoverflow.com/questions/9233219/how-to-create-a-list-of-alphabets-to-use-with-grid-coordinates-ie-a-b-z
 """
 def base_26_generator(x):
+    assert re.search("^\d+", str(x)), "(Error) digits only"
     if x == 0: yield x
     while x > 0:
         yield x % 26
-        x //= 26    
+        x //= 26
 
 def int_to_base_26_chr(x):
     return ''.join(lowercase[i] for i in reversed(list(base_26_generator(x))))
@@ -47,12 +49,9 @@ class Sheet:
 #        self.col_idx = [base_26_chr(x) for x in range(len(row))]
 #        self.cols = [base_26_chr(x) for x in range(len(row))]
 
-    def push(self, cell, row, col):
+    def new(self, cell, row, col):
         key = str(int_to_base_26_chr(col)) + str(row)
         self.cells[key] = Cell(cell, row, col)
-
-    def update(self, cell):
-        self.cells.update(cell)
 
     def get_cell(self, cell_row):
 #        if self.cells[cell_row].computed:
@@ -68,120 +67,111 @@ class Sheet:
         with open(filename, 'rb') as csv_file:
             reader = csv.reader(csv_file, 'spreadsheet')
             try:
-                for csv_line in reader:
+                for csv_row in reader:
                     if row_id == 1: # get columns
-                        self.cols = len(csv_line)
-                    for csv_value in csv_line:
-                        self.push(csv_value, row_id, col_id)
+                        self.cols = len(csv_row)
+                    for csv_cell in csv_row:
+                        self.new(csv_cell, row_id, col_id)
                         col_id += 1
                     col_id = 0
                     row_id += 1
 
             except csv.Error as e:
-<<<<<<< HEAD
                 sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))
-
-=======
-                sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))        
->>>>>>> 572a556918e47677751741df51844dafcffd2e27
 
     def compute(self):
         for key in self.cells:
-            print "Post fix key: " + str(key)
-            print "Expression: " + str(self.cells[key].raw)
-            print "Postfix output: " + str()
-            self.cells[key].computed = self.postfix(str(self.cells[key].raw))
+            logging.info("Post fix key: " + str(key))
+            logging.info("Expression: " + str(self.cells[key].raw))
+            logging.info("Postfix output: " + str())
+            self.cells[key].computed = postfix(str(self.cells[key].raw), self)
 
     ##TODO add print for raw/computed, use cell objects instead
     def show(self):
         for key in self.cells:                
             print str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
+ 
+def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
+    """Computes the self.postfix expression of a string of numbers.
+    >>> print postfix("5 1 2 + 4 * + 3 -")
+    14.0
+    >>> print postfix("4 2 5 * + 1 3 2 * + /")
+    2.0
+    >>> print postfix("2 3 8 * + 4 48 4 2 + / 6 * + -")
+    -26.0
+    >>> print postfix("5 2 %")
+    1.0
+    >>> print postfix("5 2 /")
+    2.5
+    >>> print postfix("5 2 //")
+    2.0
+    >>> print postfix("2 3 **")
+    8.0
+    >>> print postfix("18 4 -")
+    14.0
+    """
+    if not expression:
+        return "#ERR"
 
-    def postfix(self, expression, operators=ARITHMETIC_OPERATORS):
+    logging.info("Evaluate postfix: " + str(expression))
+    stack = Stack()
+    tokens = deque(expression.split())
+    while tokens or stack.items:
+        logging.info("Tokens:" + str(tokens))
+        logging.info("Postfix stack: " + str(stack.items))
 
-        if not expression:
-            return "#ERR"
+        if not tokens and stack.len() == 1:
+            return stack.pop()
 
-        print "Evaluate postfix: " + str(expression)
-        stack = Stack()
+        if tokens:
+            token = tokens.popleft()
+            logging.info("Token from expression queue: " + token)
 
+            # if it is a number then push onto stack
+            if re.match("^[-+]?[0-9]*\.?[0-9]+", token):
 
-        tokens = deque(expression.split())
-        while tokens or stack.items:
-            print "Tokens:" + str(tokens)
-            print "Postfix stack: " + str(stack.items)
+                stack.push(float(token))
 
-            if not tokens and stack.len() == 1:
-                return stack.pop()
+            elif re.search("^([a-z])+([\d])+", token):
 
-            if tokens:
-                token = tokens.popleft()
-                print "Token from expression queue: " + token
+                cellref = re.match("^([a-z]+)([\d]+)", token)
+                logging.info(cellref.group())
+                logging.info("Lookup value: " + str(sheet.get_cell(cellref.group())))
 
-                # if it is a number then push onto stack
-                if re.match("[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?", token):
+                assert re.search("^[a-z]+", str(cellref.group(1))), str(cellref.group(1)) + "(Error) valid character"
+                assert re.search("^[\d]+", str(cellref.group(2))), str(cellref.group(2)) + "(Error) Must be a valid number"
 
-                    stack.push(float(token))
+                val = sheet.get_cell(cellref.group())                    
+                stack.push(postfix(val, sheet))
 
-                elif re.match("^([a-z])+([\d])+", token):
+            elif token in operators:
 
-                    cellref = re.match("^([a-z])+([\d])+", token)
-                    print cellref.group()
-                    print "Lookup value: " + str(self.get_cell(cellref.group()))
-                    val = self.get_cell(cellref.group())
-
-                    stack.push(self.postfix(val))
-
-                elif token in operators:
-
-                    print "Perform operation... "
-
-                    assert stack.len() >= 2, "(Error) The user has not input sufficient values in the expression"
-                    print token
-                    print stack.items
+                logging.info("Perform operation... ")
+                logging.info(token)
+                logging.info(stack.items)
 
 #                    result = self.calculate(operators[token], one, two)
-                    operator = operators[token]
-                    one = stack.pop()
-                    two = stack.pop()
+                assert stack.len() >= 2, "(Error) The user has not input sufficient values in the expression"
+                operator = operators[token]
+                right = stack.pop() # 1st pop yields second operand   
+                left = stack.pop() # 2nd pop yields first operand   
 
-                    print "self: " + str(one)
-                    print "other: " + str(two)
+                assert re.search("[-+]?[0-9]*\.?[0-9]+", str(left)), str(left) + "(Error) Must be a valid number"
+                assert re.search("[-+]?[0-9]*\.?[0-9]+", str(right)), str(right) + "(Error) Must be a valid float or "
 
-                    assert not math.isnan(one), "(Error) Must be a valid number"
-                    assert not math.isnan(two), "(Error) Must be a valid number"                    
+                logging.info("Evaluate: operator(left operand: %s, right operand: %s)" % (str(left), str(right)))
 
-                    print ("Evaluate: operator(self: %s, other: %s)") % (str(one), str(two))
+                # Evaluate the operator, with the values as arguments.
+                result = operator(*[float(left), float(right)])
 
-                    # Evaluate the operator, with the values as arguments.
-                    result = operator(*[float(two), float(one)])
+                # Push the returned results, if any, back onto the stack.
+                stack.push(float(result))
 
-                    # Push the returned results, if any, back onto the stack.
-                    stack.push(float(result))
+            else:
+                assert "(Error) The user has not input sufficient vfalues in the expression"
 
-                else:
-                    assert "(Error) The user has not input sufficient vfalues in the expression"
-
-            elif (stack.len() == 1):
-                return stack.pop()
-
-"""Computes the self.postfix expression of a string of numbers.
-
->>> print postfix("5 1 2 + 4 * + 3 -")
-14.0
->>> print postfix("4 2 5 * + 1 3 2 * + /")
-2.0
->>> print postfix("5 2 %")
-1.0
->>> print postfix("5 2 /")
-2.5
->>> print postfix("5 2 //")
-2.5        
->>> print postfix("2 3 **")
-8.0
->>> print postfix("18 4 -")
-14.0
-""" 
+        elif (stack.len() == 1):
+            return stack.pop()
 
 class Stack:
     """Inits simple stack class with push and pop"""
