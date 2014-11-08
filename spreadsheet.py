@@ -24,7 +24,6 @@ ARITHMETIC_OPERATORS = {
 argument if the ternary version of the built-in 'pow()' function is to be supported.
 """
 
-
 def base_26_generator(x):
     """ Base 26 conversion functions borrowed from Stack overflow
             http://bit.ly/10U0IUE
@@ -52,9 +51,10 @@ class Sheet(object):
 
     def get_cell(self, cell_row):
         """ Returns raw not yet computed value of the cell if found """
-#        if self.cells[cell_row].computed:
-#            return self.cells[cell_row].computed
-#        else
+        #        if self.cells[cell_row].computed:
+        #            return self.cells[cell_row].computed
+        #        else
+        #TODO (Scott) test that row/col is in range
         #TODO (Scott) Handle lower and upper
         if cell_row in self.cells:
             return self.cells[cell_row].raw
@@ -62,19 +62,14 @@ class Sheet(object):
     def import_csv(self, filename):
         """Read CSV file and update cells"""
         csv.register_dialect('spreadsheet', delimiter=',', quoting=csv.QUOTE_NONE)
-        row_id = 1
-        col_id = 0
         with open(filename, 'rb') as csv_file:
             reader = csv.reader(csv_file, 'spreadsheet')
             try:
-                for csv_row in reader:
+                for row_id, csv_row in enumerate(reader):
                     if row_id == 1: # get columns
                         self.cols = len(csv_row)
-                    for csv_cell in csv_row:
-                        self.update(csv_cell, row_id, col_id)
-                        col_id += 1
-                    col_id = 0
-                    row_id += 1
+                    for col_id, csv_cell in enumerate(csv_row):
+                        self.update(csv_cell, row_id + 1, col_id + 1)
 
             except csv.Error as e:
                 sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))
@@ -94,10 +89,32 @@ class Sheet(object):
             print str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
 
 def is_numeric(token):
-    """Returns true if token looks like a float or int"""
-    return re.search(r"^[-+]?[0-9]*\.?[0-9]+", str(token))
+    """Returns true if token looks like a float or int, else return nothing
+    >>> is_numeric("5")
+    True
+    >>> is_numeric("5123123123")
+    True
+    >>> is_numeric("5.0")
+    True
+    >>> is_numeric("-5.0")
+    True
+    >>> is_numeric("+5.0")
+    True
+    >>> is_numeric("-5")
+    True
+    >>> is_numeric("+")
+    False
+    >>> is_numeric("-")
+    False
+    >>> is_numeric(" ")
+    False
+    """
+    if re.search(r"^(\+|-)?([0-9]+\.?[0-9]*|\.[0-9]+)([eE](\+|-)?[0-9]+)?", str(token)):
+        return True
+    else:
+        return False
 
-def is_identifier(token):
+def is_cell_reference(token):
     """Returns true if token appears to be a cell reference / identifer"""
     return re.search("^[a-z]+[\d]+", token)
 
@@ -109,6 +126,8 @@ def is_operator(token, operators=ARITHMETIC_OPERATORS):
 def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
     """Computes the self.postfix expression of a string of numbers.
     >>> print postfix("+")
+    #ERR
+    >>> print postfix("-")
     #ERR
     >>> print postfix("5")
     5
@@ -133,6 +152,7 @@ def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
     >>> print postfix("15 5 +")
     20.0
     """
+    #TODO check for "random chars, --, invalid postfix, etc. this will be"
     if not expression:
         return "#ERR"
 
@@ -140,11 +160,13 @@ def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
     stack = Stack()
     tokens = deque(expression.split())
 
-    print tokens
-    if len(tokens) == 1 and is_numeric(tokens):
-        return tokens
+#    print len(tokens)
+#    print is_numeric(tokens)
+#    print tokens[-1]
+    if len(tokens) == 1 and is_numeric(tokens[-1]):
+        stack.push(tokens.popleft())
 
-    if len(tokens) == 1 and (not is_numeric(tokens)):
+    if len(tokens) == 1 and (not is_numeric(tokens[-1])):
         return "#ERR"
 
     while tokens or stack.items:
@@ -163,17 +185,9 @@ def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
 
                 stack.push(float(token))
 
-            elif is_identifier(token):
+            elif is_cell_reference(token):
 
                 cellref = re.match(r"^([a-z]+)([\d]+)", token)
-#                logging.info(cellref.group())
-#                print logging.info("Lookup value: " + str(sheet.get_cell(cellref.group())))
-#                assert not cellref
-                assert re.search("^[a-z]+", str(cellref.group(1))), str(cellref.group(1)) \
-                                + "(Error) valid character"
-                assert re.search("^[\d]+", str(cellref.group(2))), str(cellref.group(2)) \
-                                + "(Error) Must be a valid number"
-
                 val = sheet.get_cell(cellref.group())
                 stack.push(postfix(val, sheet))
 
