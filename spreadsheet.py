@@ -1,228 +1,225 @@
 #!/usr/bin/env python -tt
 
-import sys, csv, operator, argparse, re, logging
+import sys
+import csv
+import os
+import operator
+import re
+import string
+import StringIO
+import math
 from collections import deque
-from string import lowercase # imports 'abcdefghijklmnopqrstuvwxyz'
 
-parser = argparse.ArgumentParser(description='Spreadsheet with Postfix RPV Eval by Scott Coleman')
-
-# Allow any number of additional arguments.
-parser.add_argument(nargs='*', action='store', dest='inputs',
-                    help='input filenames')
-
+import argparse
+parser = argparse.ArgumentParser(description='Process spreadsheet with CSV input and evaluate postfix by Scott Coleman')
+parser.add_argument(nargs=1, dest='csvfilename',
+                   help='an input file in comma seprated CSV format')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1')
 args = parser.parse_args()
-# print args.__dict__
-
-ARITHMETIC_OPERATORS = {
-    '+': operator.add, '-': operator.sub, '*': operator.mul,
-    '/': operator.div, '//': operator.floordiv,
-    '%': operator.mod, '**': operator.pow,
-    '<<': operator.lshift, '>>': operator.rshift
-    }
-
-""" Limitation: Note that '__pow__()' should be defined to accept an optional third
-argument if the ternary version of the built-in 'pow()' function is to be supported.
-"""
-
-def base_26_generator(x):
-    """ Base 26 conversion functions borrowed from Stack overflow
-            http://bit.ly/10U0IUE
-    """
-    assert re.search(r"^\d+", str(x)), "(Error) digits only"
-    if x == 0: yield x
-    while x > 0:
-        yield x % 26
-        x //= 26
-
-def int_to_base_26_chr(x):
-    """ Return lowercase character in base 26 """
-    return ''.join(lowercase[i] for i in reversed(list(base_26_generator(x))))
 
 class Sheet(object):
-    """ Spreadsheet class """
+    """Simple spreadsheet class with Postfix support
+    """
     def __init__(self):
         self.cells = {}
         self.cols = None
+        self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
+                           '/': operator.div, '//': operator.floordiv,
+                           '%': operator.mod, '**': operator.pow }
 
-    def update(self, cell, row, col):
-        """ Update cell in the spreadsheet using row/col pair """
-        key = str(int_to_base_26_chr(col)) + str(row)
-        self.cells[key] = Cell(cell, row, col)
+    def int_to_base_26_chr(self, x):
+        """ Reference to sourceforge http://bit.ly/10U0IUE """
+        from string import lowercase # imports 'a...z'
+        return ''.join(lowercase[i] for i in reversed(list(self.base_26_generator(x))))
 
-    def get_cell(self, cell_row):
-        """ Returns raw not yet computed value of the cell if found """
-        #        if self.cells[cell_row].computed:
-        #            return self.cells[cell_row].computed
-        #        else
-        #TODO (Scott) test that row/col is in range
-        #TODO (Scott) Handle lower and upper
-        if cell_row in self.cells:
-            return self.cells[cell_row].raw
+    def base_26_generator(self, x):
+        if x == 0: yield x
+        while x > 0:
+            yield x % 26
+            x //= 26
 
-    def import_csv(self, filename):
-        """Read CSV file and update cells"""
+    def guess_numeric(self, string):
+        return self.guess_int(string) or self.guess_float(string)
+
+    def guess_int(self, string):
+        try:
+            int(string)
+            return True
+        except ValueError:
+            return False
+
+    def guess_float(self, string):
+        try:
+            float(string)
+            return True
+        except ValueError:
+            return False
+
+    def update_cell(self, data, row, col):
+        """Update cell or create a new one if not exists"""
+        key = str(self.int_to_base_26_chr(col)) + str(row)
+        self.cells[key] = Cell(data, row, col)
+
+    def eval(self, expression):
+        """Update cell or create a new one if not exists"""
+        operator = self.operators[expression.operator]
+        return operator(*[float(expression.left), float(expression.right)])
+
+    class TokenNode(object):
+        """Inits cell object with raw and computed values"""
+        def __init__(self, data):
+            self.data = data.strip()
+            self.type = None # symbol, value, operator
+            self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
+                               '/': operator.div, '//': operator.floordiv,
+                               '%': operator.mod, '**': operator.pow }
+        def is_numeric(self):
+            """Returns true if token looks like a float or int, else return nothing
+            """
+            if re.search(r"^(\+|-)?([0-9]+\.?[0-9]*|\.[0-9]+)([eE](\+|-)?[0-9]+)?", str(self.data)):
+                return True
+            else:
+                return False
+
+        def is_operator(self):
+            """Returns true if token appears to be an arithmatic operator"""
+            if self.data in self.operators:
+                return True
+
+    def import_csv(self, fname):
+        assert os.path.isfile(fname)
         csv.register_dialect('spreadsheet', delimiter=',', quoting=csv.QUOTE_NONE)
-        with open(filename, 'rb') as csv_file:
-            reader = csv.reader(csv_file, 'spreadsheet')
+        with open(fname, 'rb') as fname:
+            csv_reader = csv.reader(fname, 'spreadsheet')
             try:
-                for row_id, csv_row in enumerate(reader):
-                    if row_id == 1: # get columns
-                        self.cols = len(csv_row)
-                    for col_id, csv_cell in enumerate(csv_row):
-                        self.update(csv_cell, row_id + 1, col_id + 1)
+                sheet = Sheet()
+                for row_key, row in enumerate(csv_reader):
+                    for field_key, csv_field in enumerate(row):
+                        self.update_cell(csv_field.strip(), row_key + 1, field_key) # TODO: this should create use cell object
 
             except csv.Error as e:
-                sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))
+              sys.exit('file %s, line %d: %s' % (filename, reader.line_num, e))
 
-    def compute(self):
-        """Parse tokens as postfix expressions"""
-        for key in self.cells:
-            logging.info("Post fix key: " + str(key))
-            logging.info("Expression: " + str(self.cells[key].raw))
-            logging.info("Postfix output: " + str())
-            self.cells[key].computed = postfix(str(self.cells[key].raw), self)
+    def import_csv_string(self, csv_string):
+        """Imports string as if CSV file. This is used in unit tests"""
+        csv.register_dialect('spreadsheet', delimiter=',', quoting=csv.QUOTE_NONE)
+        csv_reader = csv.reader(StringIO.StringIO(csv_string), 'spreadsheet')
+        for row_key, row in enumerate(csv_reader):
+            for field_key, csv_field in enumerate(row):
+                self.update_cell(csv_field.strip(),  row_key + 1, field_key) # TODO: this should create use cell object
 
-    ##TODO add print for raw/computed, use cell objects instead
-    def show(self):
-        """Print raw expression list and [computed value]"""
-        for key in self.cells:
-            print str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
-
-def is_numeric(token):
-    """Returns true if token looks like a float or int, else return nothing
-    >>> is_numeric("5")
-    True
-    >>> is_numeric("5123123123")
-    True
-    >>> is_numeric("5.0")
-    True
-    >>> is_numeric("-5.0")
-    True
-    >>> is_numeric("+5.0")
-    True
-    >>> is_numeric("-5")
-    True
-    >>> is_numeric("+")
-    False
-    >>> is_numeric("-")
-    False
-    >>> is_numeric(" ")
-    False
-    """
-    if re.search(r"^(\+|-)?([0-9]+\.?[0-9]*|\.[0-9]+)([eE](\+|-)?[0-9]+)?", str(token)):
-        return True
-    else:
-        return False
-
-def is_cell_reference(token):
-    """Returns true if token appears to be a cell reference / identifer"""
-    return re.search("^[a-z]+[\d]+", token)
-
-def is_operator(token, operators=ARITHMETIC_OPERATORS):
-    """Returns true if token appears to be an arithmatic operator"""
-    if token in operators:
-        return True
-
-def postfix(expression, sheet = Sheet(), operators=ARITHMETIC_OPERATORS):
-    """Computes the self.postfix expression of a string of numbers.
-    >>> print postfix("+")
-    #ERR
-    >>> print postfix("-")
-    #ERR
-    >>> print postfix("5")
-    5
-    >>> print postfix("c1")
-    #ERR
-    >>> print postfix("5 1 2 + 4 * + 3 -")
-    14.0
-    >>> print postfix("4 2 5 * + 1 3 2 * + /")
-    2.0
-    >>> print postfix("2 3 8 * + 4 48 4 2 + / 6 * + -")
-    -26.0
-    >>> print postfix("5 2 %")
-    1.0
-    >>> print postfix("5 2 /")
-    2.5
-    >>> print postfix("5 2 //")
-    2.0
-    >>> print postfix("2 3 **")
-    8.0
-    >>> print postfix("18 4 -")
-    14.0
-    >>> print postfix("15 5 +")
-    20.0
-    """
-    #TODO check for "random chars, --, invalid postfix, etc. this will be"
-    if not expression:
-        return "#ERR"
-
-    logging.info("Evaluate postfix: " + str(expression))
-    stack = Stack()
-    tokens = deque(expression.split())
-
-#    print len(tokens)
-#    print is_numeric(tokens)
-#    print tokens[-1]
-    if len(tokens) == 1 and is_numeric(tokens[-1]):
-        stack.push(tokens.popleft())
-
-    if len(tokens) == 1 and (not is_numeric(tokens[-1])):
-        return "#ERR"
-
-    while tokens or stack.items:
-        logging.info("Tokens:" + str(tokens))
-        logging.info("Postfix stack: " + str(stack.items))
-
-        if not tokens and stack.len() == 1:
-            return stack.pop()
-
-        if tokens:
-            token = tokens.popleft()
-            logging.info("Token from expression queue: " + token)
-
-            # if it is a number then push onto stack
-            if is_numeric(token):
-
-                stack.push(float(token))
-
-            elif is_cell_reference(token):
-
-                cellref = re.match(r"^([a-z]+)([\d]+)", token)
-                val = sheet.get_cell(cellref.group())
-                stack.push(postfix(val, sheet))
-
-            elif is_operator(token):
-
-                logging.info("Perform operation... ")
-                logging.info(token)
-                logging.info(stack.items)
-
-#                    result = self.calculate(operators[token], one, two)
-                assert stack.len() >= 2, \
-                    "(Error) The user has not input sufficient values in the expression"
-                operator = operators[token]
-                right = stack.pop() # 1st pop yields second operand
-                left = stack.pop() # 2nd pop yields first operand
-
-                assert re.search(r"[-+]?[0-9]*\.?[0-9]+", str(left)), str(left) \
-                                + "(Error) Must be a valid number"
-                assert re.search(r"[-+]?[0-9]*\.?[0-9]+", str(right)), str(right) \
-                                + "(Error) Must be a valid float or "
-
-                logging.info("Evaluate: operator(left operand: %s, right operand: %s)"
-                            % (str(left), str(right)))
-
-                # Evaluate the operator, with the values as arguments.
-                result = operator(*[float(left), float(right)])
-
-                # Push the returned results, if any, back onto the stack.
-                stack.push(float(result))
-
+    def get_cell_value(self, key):
+        if key in self.cells:
+            if self.cells[key].computed:
+                return self.cells[key].computed
             else:
-                assert "(Error) The user has not input sufficient vfalues in the expression"
+                return self.cells[key].raw
 
-        elif (stack.len() == 1):
-            return stack.pop()
+    def is_calculating(self, cell_row):
+        """Check if cell is currently being calculated. Use to detect circular references. """
+        return self.cells[cell_row].status
+
+    def set_status(self, cell_row, status = None):
+        """Set status of cell to calculating"""
+        self.cells[cell_row].status = status
+
+    def evaluate_postfix(self):
+        for key in self.cells:
+            self.cells[key].computed = self.postfix(str(self.cells[key].raw))
+
+    def show_full(self):
+        for key in self.cells:
+            print key + ":" + str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
+
+    def show(self):
+        for key in self.cells:
+            # print key + ":" + str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
+            print str(self.cells[key].computed)
+
+    def show_csv(self):
+        for key in self.cells:
+            # print key + ":" + str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
+            print str(self.cells[key].computed)
+
+    def no_decimal(self, i):
+        return (str(i)[-2:] == '.0' and str(i)[:-2] or str(i))
+
+    def postfix(self, expression):
+        #TODO fails on 3 1 1 -
+        #TODO return int or float
+        """Computes the self.postfix expression of a string of numbers.
+        >>> sheet = Sheet()
+        >>> print sheet.postfix("3 1 -")
+        2.0
+        >>> print sheet.postfix("5 1 2 + 4 * + 3 -")
+        14.0
+        >>> print sheet.postfix("4 2 5 * + 1 3 2 * + /")
+        2.0
+        >>> print sheet.postfix("5 2 %")
+        1.0
+        >>> print sheet.postfix("5 2 /")
+        2.5
+        >>> print sheet.postfix("5 2 //")
+        2.0
+        >>> print sheet.postfix("2 3 **")
+        8.0
+        >>> print sheet.postfix("18 4 -")
+        14.0
+        """
+        if not expression or (isinstance(expression, float) and math.isnan(expression)):
+            return float('NaN')
+        elif (isinstance(expression, float)):
+            return expression
+
+        stack = Stack()
+        tokens = deque(expression.split())
+        visited = set()
+
+        while stack or tokens:
+
+            if not tokens and stack.len() == 1:
+                return stack.pop()
+
+            if tokens:
+                token = self.TokenNode(tokens.popleft())
+                expression = ExpressionNode()
+
+                symbol = re.match(r"^([a-z]+)([\d]+)", str(token.data))
+                if symbol and (symbol.group() in visited):
+                    return float('NaN')
+
+                if len(tokens) == 0 and token.is_numeric():
+                    return token.data
+
+                if symbol:
+                    if symbol.group() in visited:
+                        # detect circular dependency
+                        #TODO (Scott) add options to allow circular dependency
+                        return float('NaN')
+                    else:
+                        val = self.get_cell_value(symbol.group())
+                        token.data = self.postfix(val)
+                        visited.add(symbol.group())
+                        stack.push(token.data)
+                        continue
+
+                if token.is_numeric():
+
+                    stack.push(token.data)
+
+                elif token.is_operator():
+
+                    if stack.len() < 2:
+                        return float('NaN')
+                    else:
+                        expression.operator = token.data
+                        expression.right = stack.pop() # 1st pop yields second operand
+                        expression.left = stack.pop() # 2nd pop yields first operand
+                        try:
+                            result = self.eval(expression)
+                            stack.push(result)
+                        except ValueError:
+                            return float('NaN')
 
 class Stack:
     """Inits simple stack class with push and pop"""
@@ -244,20 +241,48 @@ class Stack:
     def len(self):
         return len(self.items)
 
+class Expression(object):
+    def __init__(self):
+        self.left = None
+        self.operator = None
+        self.right = None
+
+"""class ConstantNode(ExpressionNode):
+    def __init__(self):
+        self.data = None
+        self.left = None
+        self.right = None
+
+class OperatorNode(ExpressionNode):
+    def __init__(self):
+        self.left = None
+        self.operator = None
+        self.right = None
+"""
 class Cell(object):
     """Inits cell object with raw and computed values"""
     def __init__(self, raw, col, row):
         self.raw = raw.strip()
         self.computed = None
-        self.col = col
-        self.row = row
 
 def main():
-    filename = args.inputs[0]
+    """TODO add this to the doctest
+    >>> csv.register_dialect('spreadsheet', delimiter=',', quoting=csv.QUOTE_NONE)
+    >>> string_io = StringIO.StringIO('4 2 5 * + 1 3 2 * + /, 5 1 2 + 4 * + 3 -\\n4 2 5 * + 1 3 2 * + /, a1')
+    >>> sheet = Sheet()
+    >>> sheet.import_csv_string(string_io.getvalue())
+    >>> sheet.evaluate_postfix()
+    >>> sheet.show()
+    2.0
+    2.0
+    14.0
+    2.0
+    """
     sheet = Sheet()
-    sheet.import_csv(filename)
-    sheet.compute()
-    sheet.show()
+    f = args.csvfilename.pop(0)
+    sheet.import_csv(f)
+    sheet.evaluate_postfix()
+    sheet.show_csv()
 
 if __name__ == '__main__':
   main()
