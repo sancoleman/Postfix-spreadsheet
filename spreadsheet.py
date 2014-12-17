@@ -22,6 +22,7 @@ class Sheet(object):
     """
     def __init__(self):
         self.cells = {}
+        self.index = {}
         self.cols = None
         self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
                            '/': operator.div, '//': operator.floordiv,
@@ -30,7 +31,11 @@ class Sheet(object):
     def int_to_base_26_chr(self, x):
         """ Reference to sourceforge http://bit.ly/10U0IUE """
         from string import lowercase # imports 'a...z'
-        return ''.join(lowercase[i] for i in reversed(list(self.base_26_generator(x))))
+        if x in self.index:
+            return self.index[x]
+        else:
+            self.index[x] = ''.join(lowercase[i] for i in reversed(list(self.base_26_generator(x))))
+            return self.index[x]
 
     def base_26_generator(self, x):
         if x == 0: yield x
@@ -175,7 +180,7 @@ class Sheet(object):
 
             if tokens:
                 token = self.TokenNode(tokens.popleft())
-                expression = ExpressionNode()
+                expression = Expression()
 
                 symbol = re.match(r"^([a-z]+)([\d]+)", str(token.data))
                 if symbol and (symbol.group() in visited):
