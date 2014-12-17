@@ -73,6 +73,7 @@ class Sheet(object):
             self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
                                '/': operator.div, '//': operator.floordiv,
                                '%': operator.mod, '**': operator.pow }
+
         def is_numeric(self):
             """Returns true if token looks like a float or int, else return nothing
             """
@@ -114,14 +115,6 @@ class Sheet(object):
                 return self.cells[key].computed
             else:
                 return self.cells[key].raw
-
-    def is_calculating(self, cell_row):
-        """Check if cell is currently being calculated. Use to detect circular references. """
-        return self.cells[cell_row].status
-
-    def set_status(self, cell_row, status = None):
-        """Set status of cell to calculating"""
-        self.cells[cell_row].status = status
 
     def evaluate_postfix(self):
         for key in self.cells:
