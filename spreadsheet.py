@@ -64,7 +64,11 @@ class Sheet(object):
         def eval(self):
             """Update cell or create a new one if not exists"""
             operator = self.operators[self.operator]
-            return operator(*[float(self.left), float(self.right)])
+            try:
+                result = operator(*[float(self.left), float(self.right)])
+            except ValueError:
+                return ValueError
+            return result
 
     class TokenNode(object):
         """Inits cell object with raw and computed values"""
@@ -109,14 +113,6 @@ class Sheet(object):
         key = str(self.int_to_base_26_chr(col)) + str(row)
         self.cells[key] = self.Cell(data, row, col)
 
-    def eval(self, expression):
-        """Update cell or create a new one if not exists"""
-        operator = self.operators[expression.operator]
-        try:
-            result = operator(*[float(expression.left), float(expression.right)])
-        except ValueError:
-            return ValueError
-        return result
 
     def is_float(self, val):
         """Returns true if token looks like a float or int, else return nothing
