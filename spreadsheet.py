@@ -1,4 +1,4 @@
-#!/usr/bin/env python -tt
+#!/usr/bin/env python2.7 -tt
 
 import sys
 import csv
@@ -68,6 +68,9 @@ class Sheet(object):
     def eval(self, expression):
         """Update cell or create a new one if not exists"""
         operator = self.operators[expression.operator]
+        assert operator
+        assert expression.left
+        assert expression.right
         return operator(*[float(expression.left), float(expression.right)])
 
     class TokenNode(object):
@@ -125,18 +128,16 @@ class Sheet(object):
         for key in self.cells:
             self.cells[key].computed = self.postfix(str(self.cells[key].raw))
 
-    def show_full(self):
+    def show_debug(self):
         for key in self.cells:
             print key + ":" + str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
 
     def show(self):
         for key in self.cells:
-            # print key + ":" + str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
             print str(self.cells[key].computed)
 
     def show_csv(self):
         for key in self.cells:
-            # print key + ":" + str(self.cells[key].raw) + " [" + str(self.cells[key].computed) + "]"
             print str(self.cells[key].computed)
 
     def no_decimal(self, i):
@@ -144,6 +145,8 @@ class Sheet(object):
 
     def postfix(self, expression):
         #TODO fails on 3 1 1 -
+        #BUG "18 4 --" fails
+        #BUG " " fails
         #TODO return int or float
         """Computes the self.postfix expression of a string of numbers.
         >>> sheet = Sheet()
@@ -163,6 +166,14 @@ class Sheet(object):
         8.0
         >>> print sheet.postfix("18 4 -")
         14.0
+        >>> print sheet.postfix(" ")
+        #ERR
+        >>> print sheet.postfix("18 4")
+        #ERR
+        >>> print sheet.postfix("18-4")
+        #ERR
+        >>> print sheet.postfix("18 4 +")
+        22
         """
         if not expression or (isinstance(expression, float) and math.isnan(expression)):
             return float('NaN')
@@ -177,22 +188,19 @@ class Sheet(object):
 
             if not tokens and stack.len() == 1:
                 return stack.pop()
-
-            if tokens:
+            else:
                 token = self.TokenNode(tokens.popleft())
                 expression = Expression()
-
                 symbol = re.match(r"^([a-z]+)([\d]+)", str(token.data))
-                if symbol and (symbol.group() in visited):
-                    return float('NaN')
 
                 if len(tokens) == 0 and token.is_numeric():
-                    return token.data
 
-                if symbol:
+                    #return token.data
+                    return float('NaN')
+
+                elif symbol:
                     if symbol.group() in visited:
-                        # detect circular dependency
-                        #TODO (Scott) add options to allow circular dependency
+                        # detected circular dependency
                         return float('NaN')
                     else:
                         val = self.get_cell_value(symbol.group())
@@ -201,7 +209,7 @@ class Sheet(object):
                         stack.push(token.data)
                         continue
 
-                if token.is_numeric():
+                elif token.is_numeric():
 
                     stack.push(token.data)
 
@@ -218,6 +226,8 @@ class Sheet(object):
                             stack.push(result)
                         except ValueError:
                             return float('NaN')
+                else:
+                    return float('NaN')
 
 class Stack:
     """Inits simple stack class with push and pop"""
