@@ -52,23 +52,44 @@ class Sheet(object):
             self.raw = raw.strip()
             self.computed = None
 
-    class Expression(object):
+    class Postfix(object):
+        """This subclass handles Cell types of type postfix"""
         def __init__(self):
             self.left = None
             self.operator = None
             self.right = None
+            self.result = None
             self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
                                '/': operator.div, '//': operator.floordiv,
                                '%': operator.mod, '**': operator.pow }
+
+        def set_operator(self, data):
+            if data in self.operators:
+                self.operator = data
+            else:
+                return ValueError
+
+        def set_right(self, data):
+            try:
+                self.data = float(data)
+            except ValueError:
+                return ValueError
+
+        def set_left(self, data):
+            try:
+                self.data = float(data)
+            except ValueError:
+                return ValueError
 
         def eval(self):
             """Update cell or create a new one if not exists"""
             operator = self.operators[self.operator]
             try:
-                result = operator(*[float(self.left), float(self.right)])
+                self.result = operator(*[float(self.left), float(self.right)])
+            except TypeError:
+                return TypeError
             except ValueError:
                 return ValueError
-            return result
 
     class TokenNode(object):
         """Inits cell object with raw and computed values"""
@@ -118,6 +139,8 @@ class Sheet(object):
             float(val)
             return True
         except ValueError:
+            return False
+        except TypeError:
             return False
 
     def import_csv(self, fname):
@@ -250,16 +273,18 @@ class Sheet(object):
 
                 else:
 
-                    expression = self.Expression()
-                    expression.operator = token.data
                     try:
-                        expression.right = float(stack.pop()) # 1st pop yields second operand
-                        expression.left = float(stack.pop())  # 2nd pop yields first operand
-                        result = float(expression.eval())
+                        postfix = self.Postfix()
+                        postfix.set_operator(token.data)
+                        postfix.set_right(stack.pop())
+                        postfix.set_left(stack.pop())
+                        postfix.eval()
+                        stack.push(postfix.result)
+
+                    except TypeError:
+                        return float('NaN')
                     except ValueError:
                         return float('NaN')
-
-                    stack.push(float(result))
 
 
 def main():
