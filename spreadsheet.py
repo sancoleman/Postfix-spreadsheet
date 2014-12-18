@@ -25,9 +25,6 @@ class Sheet(object):
         self.cells = {}
         self.index = {}
         self.cols = None
-        self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
-                           '/': operator.div, '//': operator.floordiv,
-                           '%': operator.mod, '**': operator.pow }
 
     def int_to_base_26_chr(self, x):
         """ Reference to sourceforge http://bit.ly/10U0IUE """
@@ -88,9 +85,6 @@ class Sheet(object):
         def __init__(self, data):
             self.data = data.strip()
             self.type = None # symbol, value, operator
-            self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
-                               '/': operator.div, '//': operator.floordiv,
-                               '%': operator.mod, '**': operator.pow }
 
         def is_float(self):
             """Returns true if token looks like a float or int, else return nothing
@@ -205,7 +199,7 @@ class Sheet(object):
         >>> print sheet.postfix("18-4")
         #ERR
         >>> print sheet.postfix("18 4 +")
-        22
+        22.0
         """
         if not expression or (isinstance(expression, float) and math.isnan(expression)):
             return float('NaN')
@@ -253,14 +247,18 @@ class Sheet(object):
                     return float('NaN')
 
                 else:
+
                     expression = Expression()
                     expression.operator = token.data
                     try:
                         expression.right = float(stack.pop()) # 1st pop yields second operand
                         expression.left = float(stack.pop())  # 2nd pop yields first operand
-                        return float(eval(expression))
-                    except:
+                        result = float(expression.eval())
+                    except ValueError:
                         return float('NaN')
+
+                    stack.push(float(result))
+
             else:
                 return float('NaN')
 
@@ -289,6 +287,17 @@ class Expression(object):
         self.left = None
         self.operator = None
         self.right = None
+        self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
+                           '/': operator.div, '//': operator.floordiv,
+                           '%': operator.mod, '**': operator.pow }
+
+    def eval(self):
+        """Update cell or create a new one if not exists"""
+        operator = self.operators[self.operator]
+        assert self.operator
+        assert self.left
+        assert self.right
+        return operator(*[float(self.left), float(self.right)])
 
 """
 class ConstantNode(ExpressionNode):
