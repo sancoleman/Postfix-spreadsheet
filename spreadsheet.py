@@ -17,6 +17,7 @@ parser.add_argument(nargs=1, dest='csvfilename',
 parser.add_argument('--version', action='version', version='%(prog)s 0.1')
 args = parser.parse_args()
 
+
 class Sheet(object):
     """Simple spreadsheet class with Postfix support
     """
@@ -73,6 +74,33 @@ class Sheet(object):
         assert expression.right
         return operator(*[float(expression.left), float(expression.right)])
 
+    def is_float(self, val):
+        """Returns true if token looks like a float or int, else return nothing
+        """
+        try:
+            float(val)
+            return True
+        except ValueError:
+            return False
+
+    class ConstantNode(object):
+        """Inits cell object with raw and computed values"""
+        def __init__(self, data):
+            self.data = data.strip()
+            self.type = None # symbol, value, operator
+            self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
+                               '/': operator.div, '//': operator.floordiv,
+                               '%': operator.mod, '**': operator.pow }
+
+        def is_float(self):
+            """Returns true if token looks like a float or int, else return nothing
+            """
+            try:
+                float(self.data)
+                return True
+            except ValueError:
+                return False
+
     class TokenNode(object):
         """Inits cell object with raw and computed values"""
         def __init__(self, data):
@@ -82,12 +110,13 @@ class Sheet(object):
                                '/': operator.div, '//': operator.floordiv,
                                '%': operator.mod, '**': operator.pow }
 
-        def is_numeric(self):
+        def is_float(self):
             """Returns true if token looks like a float or int, else return nothing
             """
-            if re.search(r"^(\+|-)?([0-9]+\.?[0-9]*|\.[0-9]+)([eE](\+|-)?[0-9]+)?", str(self.data)):
+            try:
+                float(self.data)
                 return True
-            else:
+            except ValueError:
                 return False
 
         def is_operator(self):
@@ -138,7 +167,10 @@ class Sheet(object):
 
     def show_csv(self):
         for key in self.cells:
-            print str(self.cells[key].computed)
+            if (isinstance(self.cells[key].computed, float) and math.isnan(self.cells[key].computed)):
+                print "#ERR"
+            else:
+                print str(self.cells[key].computed)
 
     def no_decimal(self, i):
         return (str(i)[-2:] == '.0' and str(i)[:-2] or str(i))
@@ -186,48 +218,51 @@ class Sheet(object):
 
         while stack or tokens:
 
-            if not tokens and stack.len() == 1:
-                return stack.pop()
-            else:
+            if tokens:
                 token = self.TokenNode(tokens.popleft())
-                expression = Expression()
-                symbol = re.match(r"^([a-z]+)([\d]+)", str(token.data))
 
-                if len(tokens) == 0 and token.is_numeric():
+            symbol = re.match(r"^([a-z]+)([\d]+)", str(token.data))
 
-                    #return token.data
-                    return float('NaN')
-
-                elif symbol:
-                    if symbol.group() in visited:
-                        # detected circular dependency
-                        return float('NaN')
-                    else:
-                        val = self.get_cell_value(symbol.group())
-                        token.data = self.postfix(val)
-                        visited.add(symbol.group())
-                        stack.push(token.data)
-                        continue
-
-                elif token.is_numeric():
-
-                    stack.push(token.data)
-
-                elif token.is_operator():
-
-                    if stack.len() < 2:
-                        return float('NaN')
-                    else:
-                        expression.operator = token.data
-                        expression.right = stack.pop() # 1st pop yields second operand
-                        expression.left = stack.pop() # 2nd pop yields first operand
-                        try:
-                            result = self.eval(expression)
-                            stack.push(result)
-                        except ValueError:
-                            return float('NaN')
+            if not tokens and stack.len() == 1:
+                val = stack.pop()
+                if self.is_float(val):
+                    return val
                 else:
                     return float('NaN')
+
+            elif symbol:
+
+                if symbol.group() in visited:
+                    # detected circular dependency
+                    return float('NaN')
+
+                else:
+                    val = self.get_cell_value(symbol.group())
+                    token.data = self.postfix(val)
+                    visited.add(symbol.group())
+                    stack.push(token.data)
+
+            elif token.is_float():
+
+                stack.push(float(token.data))
+
+            elif token.is_operator():
+
+                if stack.len() < 2:
+
+                    return float('NaN')
+
+                else:
+                    expression = Expression()
+                    expression.operator = token.data
+                    try:
+                        expression.right = float(stack.pop()) # 1st pop yields second operand
+                        expression.left = float(stack.pop())  # 2nd pop yields first operand
+                        return float(eval(expression))
+                    except:
+                        return float('NaN')
+            else:
+                return float('NaN')
 
 class Stack:
     """Inits simple stack class with push and pop"""
@@ -255,7 +290,8 @@ class Expression(object):
         self.operator = None
         self.right = None
 
-"""class ConstantNode(ExpressionNode):
+"""
+class ConstantNode(ExpressionNode):
     def __init__(self):
         self.data = None
         self.left = None
@@ -280,7 +316,7 @@ def main():
     >>> sheet = Sheet()
     >>> sheet.import_csv_string(string_io.getvalue())
     >>> sheet.evaluate_postfix()
-    >>> sheet.show()
+    >>> sheet.show_csv()
     2.0
     2.0
     14.0
