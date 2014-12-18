@@ -74,10 +74,7 @@ class Sheet(object):
         """Inits cell object with raw and computed values"""
         def __init__(self, data):
             self.data = data
-            self.type = None # symbol, value, operator
-            self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
-                               '/': operator.div, '//': operator.floordiv,
-                               '%': operator.mod, '**': operator.pow }
+            self.type = None #TODO: symbol, value, operator
 
         def is_float(self):
             """Returns true if token looks like a float or int, else return nothing
@@ -245,7 +242,7 @@ class Sheet(object):
 
                 stack.push(float(token.data))
 
-            elif token.is_operator():
+            else:
 
                 if stack.len() < 2:
 
@@ -263,9 +260,6 @@ class Sheet(object):
                         return float('NaN')
 
                     stack.push(float(result))
-
-            else:
-                return float('NaN')
 
 
 def main():
