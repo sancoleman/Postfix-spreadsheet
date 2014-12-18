@@ -26,43 +26,45 @@ class Sheet(object):
         self.index = {}
         self.cols = None
 
-    def int_to_base_26_chr(self, x):
-        """ Reference to sourceforge http://bit.ly/10U0IUE """
-        from string import lowercase # imports 'a...z'
-        if x in self.index:
-            return self.index[x]
-        else:
-            self.index[x] = ''.join(lowercase[i] for i in reversed(list(self.base_26_generator(x))))
-            return self.index[x]
+    class Stack:
+        """Inits simple stack class with push and pop"""
+        def __init__(self):
+            self.items = []
 
-    def base_26_generator(self, x):
-        if x == 0: yield x
-        while x > 0:
-            yield x % 26
-            x //= 26
+        def push(self, item):
+            self.items.append(item)
 
-    def update_cell(self, data, row, col):
-        """Update cell or create a new one if not exists"""
-        key = str(self.int_to_base_26_chr(col)) + str(row)
-        self.cells[key] = Cell(data, row, col)
+        def pop(self):
+            return self.items.pop()
 
-    def eval(self, expression):
-        """Update cell or create a new one if not exists"""
-        operator = self.operators[expression.operator]
-        try:
-            result = operator(*[float(expression.left), float(expression.right)])
-        except ValueError:
-            return ValueError
-        return result
+        def show(self):
+            print self.items
 
-    def is_float(self, val):
-        """Returns true if token looks like a float or int, else return nothing
-        """
-        try:
-            float(val)
-            return True
-        except ValueError:
-            return False
+        def is_empty(self):
+            return (self.items == [])
+
+        def len(self):
+            return len(self.items)
+
+    class Cell(object):
+        """Inits cell object with raw and computed values"""
+        def __init__(self, raw, col, row):
+            self.raw = raw.strip()
+            self.computed = None
+
+    class Expression(object):
+        def __init__(self):
+            self.left = None
+            self.operator = None
+            self.right = None
+            self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
+                               '/': operator.div, '//': operator.floordiv,
+                               '%': operator.mod, '**': operator.pow }
+
+        def eval(self):
+            """Update cell or create a new one if not exists"""
+            operator = self.operators[self.operator]
+            return operator(*[float(self.left), float(self.right)])
 
     class TokenNode(object):
         """Inits cell object with raw and computed values"""
@@ -86,6 +88,44 @@ class Sheet(object):
             """Returns true if token appears to be an arithmatic operator"""
             if self.data in self.operators:
                 return True
+
+    def int_to_base_26_chr(self, x):
+        """ Reference to sourceforge http://bit.ly/10U0IUE """
+        from string import lowercase # imports 'a...z'
+        if x in self.index:
+            return self.index[x]
+        else:
+            self.index[x] = ''.join(lowercase[i] for i in reversed(list(self.base_26_generator(x))))
+            return self.index[x]
+
+    def base_26_generator(self, x):
+        if x == 0: yield x
+        while x > 0:
+            yield x % 26
+            x //= 26
+
+    def update_cell(self, data, row, col):
+        """Update cell or create a new one if not exists"""
+        key = str(self.int_to_base_26_chr(col)) + str(row)
+        self.cells[key] = self.Cell(data, row, col)
+
+    def eval(self, expression):
+        """Update cell or create a new one if not exists"""
+        operator = self.operators[expression.operator]
+        try:
+            result = operator(*[float(expression.left), float(expression.right)])
+        except ValueError:
+            return ValueError
+        return result
+
+    def is_float(self, val):
+        """Returns true if token looks like a float or int, else return nothing
+        """
+        try:
+            float(val)
+            return True
+        except ValueError:
+            return False
 
     def import_csv(self, fname):
         assert os.path.isfile(fname)
@@ -175,7 +215,7 @@ class Sheet(object):
         elif (isinstance(expression, float)):
             return expression
 
-        stack = Stack()
+        stack = self.Stack()
         tokens = deque(expression.split())
         visited = set()
 
@@ -217,7 +257,7 @@ class Sheet(object):
 
                 else:
 
-                    expression = Expression()
+                    expression = self.Expression()
                     expression.operator = token.data
                     try:
                         expression.right = float(stack.pop()) # 1st pop yields second operand
@@ -231,58 +271,6 @@ class Sheet(object):
             else:
                 return float('NaN')
 
-class Stack:
-    """Inits simple stack class with push and pop"""
-    def __init__(self):
-        self.items = []
-
-    def push(self, item):
-        self.items.append(item)
-
-    def pop(self):
-        return self.items.pop()
-
-    def show(self):
-        print self.items
-
-    def is_empty(self):
-        return (self.items == [])
-
-    def len(self):
-        return len(self.items)
-
-class Expression(object):
-    def __init__(self):
-        self.left = None
-        self.operator = None
-        self.right = None
-        self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
-                           '/': operator.div, '//': operator.floordiv,
-                           '%': operator.mod, '**': operator.pow }
-
-    def eval(self):
-        """Update cell or create a new one if not exists"""
-        operator = self.operators[self.operator]
-        return operator(*[float(self.left), float(self.right)])
-
-"""TODO
-class ConstantNode(ExpressionNode):
-    def __init__(self):
-        self.data = None
-        self.left = None
-        self.right = None
-
-class OperatorNode(ExpressionNode):
-    def __init__(self):
-        self.left = None
-        self.operator = None
-        self.right = None
-"""
-class Cell(object):
-    """Inits cell object with raw and computed values"""
-    def __init__(self, raw, col, row):
-        self.raw = raw.strip()
-        self.computed = None
 
 def main():
     """TODO add this to the doctest
