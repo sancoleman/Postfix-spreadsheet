@@ -41,23 +41,6 @@ class Sheet(object):
             yield x % 26
             x //= 26
 
-    def guess_numeric(self, string):
-        return self.guess_int(string) or self.guess_float(string)
-
-    def guess_int(self, string):
-        try:
-            int(string)
-            return True
-        except ValueError:
-            return False
-
-    def guess_float(self, string):
-        try:
-            float(string)
-            return True
-        except ValueError:
-            return False
-
     def update_cell(self, data, row, col):
         """Update cell or create a new one if not exists"""
         key = str(self.int_to_base_26_chr(col)) + str(row)
@@ -66,9 +49,6 @@ class Sheet(object):
     def eval(self, expression):
         """Update cell or create a new one if not exists"""
         operator = self.operators[expression.operator]
-        assert operator
-        assert expression.left
-        assert expression.right
         try:
             result = operator(*[float(expression.left), float(expression.right)])
         except ValueError:
@@ -84,25 +64,10 @@ class Sheet(object):
         except ValueError:
             return False
 
-    class ConstantNode(object):
-        """Inits cell object with raw and computed values"""
-        def __init__(self, data):
-            self.data = data.strip()
-            self.type = None # symbol, value, operator
-
-        def is_float(self):
-            """Returns true if token looks like a float or int, else return nothing
-            """
-            try:
-                float(self.data)
-                return True
-            except ValueError:
-                return False
-
     class TokenNode(object):
         """Inits cell object with raw and computed values"""
         def __init__(self, data):
-            self.data = data.strip()
+            self.data = data
             self.type = None # symbol, value, operator
             self.operators = { '+': operator.add, '-': operator.sub, '*': operator.mul,
                                '/': operator.div, '//': operator.floordiv,
@@ -196,6 +161,8 @@ class Sheet(object):
         8.0
         >>> print sheet.postfix("18 4 -")
         14.0
+        >>> print sheet.postfix(" ")
+        #ERR
         >>> print sheet.postfix("18 4")
         #ERR
         >>> print sheet.postfix("18-4")
@@ -217,8 +184,7 @@ class Sheet(object):
             if tokens:
                 token = self.TokenNode(tokens.popleft())
 
-            if token:
-                symbol = re.match(r"^([a-z]+)([\d]+)", str(token.data))
+            symbol = re.match(r"^([a-z]+)([\d]+)", str(token.data))
 
             if not tokens and stack.len() == 1:
                 val = stack.pop()
@@ -297,9 +263,6 @@ class Expression(object):
     def eval(self):
         """Update cell or create a new one if not exists"""
         operator = self.operators[self.operator]
-        assert self.operator
-        assert self.left
-        assert self.right
         return operator(*[float(self.left), float(self.right)])
 
 """TODO
