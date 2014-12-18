@@ -17,7 +17,6 @@ parser.add_argument(nargs=1, dest='csvfilename',
 parser.add_argument('--version', action='version', version='%(prog)s 0.1')
 args = parser.parse_args()
 
-
 class Sheet(object):
     """Simple spreadsheet class with Postfix support
     """
@@ -52,7 +51,7 @@ class Sheet(object):
             self.raw = raw.strip()
             self.computed = None
 
-    class Postfix(object):
+    class ExpressionNode(object):
         """This subclass handles Cell types of type postfix"""
         def __init__(self):
             self.left = None
@@ -265,27 +264,20 @@ class Sheet(object):
 
                 stack.push(float(token.data))
 
-            else:
+            else: # must be an operator
 
-                if stack.len() < 2:
+								try:
+								    expression = self.ExpressionNode()
+								    expression.set_operator(token.data)
+								    expression.set_right(stack.pop())
+								    expression.set_left(stack.pop())
+								    expression.eval()
+								    stack.push(expression.result)
 
-                    return float('NaN')
-
-                else:
-
-                    try:
-                        postfix = self.Postfix()
-                        postfix.set_operator(token.data)
-                        postfix.set_right(stack.pop())
-                        postfix.set_left(stack.pop())
-                        postfix.eval()
-                        stack.push(postfix.result)
-
-                    except TypeError:
-                        return float('NaN')
-                    except ValueError:
-                        return float('NaN')
-
+								except TypeError:
+								    return float('NaN')
+								except ValueError:
+								    return float('NaN')
 
 def main():
     """TODO add this to the doctest
